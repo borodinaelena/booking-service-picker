@@ -17,6 +17,7 @@ export function AddOnOptionRow({
 		<button
 			type="button"
 			disabled={isDisabled}
+			aria-pressed={isSelected}
 			onClick={onSelect}
 			className={joinClasses(
 				"flex w-full items-center justify-between gap-3 rounded-xl px-1 py-2 text-left transition",
