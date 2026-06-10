@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { SelectableOptionCard } from "@/components/ui";
-import { addOns, services } from "@/mocks";
-import type { SelectedAddOnId, SelectedServiceId } from "@/types";
+import type { SelectedAddOnId } from "@/types";
 
 import {
 	allCategoryKey,
@@ -16,26 +15,46 @@ import {
 } from "./constants";
 import { AddOnOptionRow } from "./components/AddOnOptionRow";
 import { CategoryFilterChips } from "./components/CategoryFilterChips";
+import { useAddOnsQuery, useServicesQuery } from "./queries";
 import type { CategoryFilterOption } from "./types";
 
 const compactPriceFormatter = new Intl.NumberFormat("en-US", {
 	maximumFractionDigits: 0,
 });
+const noExtraAddOnId = "none";
+const noExtraAddOnLabel = "no extra";
 
 function joinClasses(...classes: Array<string | false | undefined>) {
 	return classes.filter(Boolean).join(" ");
 }
 
 export function ServicePickerScreen() {
-	const [selectedServiceId, setSelectedServiceId] = useState<SelectedServiceId>(null);
-	const [selectedAddOnId, setSelectedAddOnId] = useState<SelectedAddOnId>(null);
-	const [selectedCategoryKey, setSelectedCategoryKey] = useState<string>(allCategoryKey);
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const { data: services = [], isLoading: isServicesLoading } = useServicesQuery();
+	const { data: addOns = [], isLoading: isAddOnsLoading } = useAddOnsQuery();
 
-	const selectedService = services.find(({ id }) => id === selectedServiceId) ?? null;
-	const selectedAddOn = addOns.find(({ id }) => id === selectedAddOnId) ?? null;
-	const totalDurationMinutes =
-		(selectedService?.durationMinutes ?? 0) + (selectedAddOn?.durationMinutes ?? 0);
-	const totalPrice = (selectedService?.price ?? 0) + (selectedAddOn?.price ?? 0);
+	const selectedCategoryParam = searchParams.get("category");
+	const selectedServiceIdParam = searchParams.get("serviceId");
+	const selectedAddOnIdParam = searchParams.get("addOnId");
+
+	function updateSearchParams(paramUpdates: Record<string, string | null>) {
+		const nextSearchParams = new URLSearchParams(searchParams.toString());
+
+		Object.entries(paramUpdates).forEach(([paramKey, paramValue]) => {
+			if (!paramValue) {
+				nextSearchParams.delete(paramKey);
+				return;
+			}
+
+			nextSearchParams.set(paramKey, paramValue);
+		});
+
+		const nextQueryString = nextSearchParams.toString();
+		const nextUrl = nextQueryString ? `${pathname}?${nextQueryString}` : pathname;
+		router.replace(nextUrl, { scroll: false });
+	}
 
 	const categoryFilterOptions: CategoryFilterOption[] = [
 		{ key: allCategoryKey, label: allCategoryLabel },
@@ -44,6 +63,32 @@ export function ServicePickerScreen() {
 			label: category,
 		})),
 	];
+	const categoryKeys = new Set(categoryFilterOptions.map(({ key }) => key));
+	const selectedCategoryKey =
+		selectedCategoryParam && categoryKeys.has(selectedCategoryParam)
+			? selectedCategoryParam
+			: allCategoryKey;
+
+	const selectedServiceCandidate =
+		selectedServiceIdParam === null
+			? null
+			: services.find(({ id }) => id === selectedServiceIdParam) ?? null;
+	const selectedService =
+		selectedServiceCandidate &&
+		(selectedCategoryKey === allCategoryKey || selectedServiceCandidate.category === selectedCategoryKey)
+			? selectedServiceCandidate
+			: null;
+
+	const isNoExtraSelected = selectedService ? selectedAddOnIdParam === noExtraAddOnId : false;
+	const selectedAddOnCandidate =
+		selectedAddOnIdParam === null || selectedAddOnIdParam === noExtraAddOnId
+			? null
+			: addOns.find(({ id }) => id === selectedAddOnIdParam) ?? null;
+	const selectedAddOn = selectedService ? selectedAddOnCandidate : null;
+	const selectedAddOnId: SelectedAddOnId = selectedAddOn?.id ?? null;
+	const totalDurationMinutes =
+		(selectedService?.durationMinutes ?? 0) + (selectedAddOn?.durationMinutes ?? 0);
+	const totalPrice = (selectedService?.price ?? 0) + (selectedAddOn?.price ?? 0);
 
 	const visibleServices =
 		selectedCategoryKey === allCategoryKey
@@ -54,13 +99,52 @@ export function ServicePickerScreen() {
 	const displayedTotalPriceAmount = selectedService ? totalPrice : 0;
 	const displayedTotalPriceDigits = compactPriceFormatter.format(displayedTotalPriceAmount);
 
-	function handleAddOnSelect(addOnId: string) {
-		if (selectedAddOnId === addOnId) {
-			setSelectedAddOnId(null);
+	function handleCategorySelect(nextCategoryKey: string) {
+		const nextCategoryParam = nextCategoryKey === allCategoryKey ? null : nextCategoryKey;
+
+		if (!selectedService) {
+			updateSearchParams({ category: nextCategoryParam });
 			return;
 		}
 
-		setSelectedAddOnId(addOnId);
+		const isSelectedServiceVisible =
+			nextCategoryKey === allCategoryKey || selectedService.category === nextCategoryKey;
+
+		if (isSelectedServiceVisible) {
+			updateSearchParams({ category: nextCategoryParam });
+			return;
+		}
+
+		updateSearchParams({
+			category: nextCategoryParam,
+			serviceId: null,
+			addOnId: null,
+		});
+	}
+
+	function handleServiceSelect(serviceId: string) {
+		updateSearchParams({ serviceId });
+	}
+
+	function handleAddOnSelect(addOnId: string) {
+		if (!selectedService) {
+			return;
+		}
+
+		if (selectedAddOnId === addOnId) {
+			updateSearchParams({ addOnId: null });
+			return;
+		}
+
+		updateSearchParams({ addOnId });
+	}
+
+	function handleNoExtraSelect() {
+		if (!selectedService) {
+			return;
+		}
+
+		updateSearchParams({ addOnId: noExtraAddOnId });
 	}
 
 	return (
@@ -85,11 +169,17 @@ export function ServicePickerScreen() {
 									<CategoryFilterChips
 										options={categoryFilterOptions}
 										selectedCategoryKey={selectedCategoryKey}
-										onSelectCategory={setSelectedCategoryKey}
+										onSelectCategory={handleCategorySelect}
 									/>
 								</div>
 
 								<div className="max-h-[58vh] space-y-2 overflow-y-auto pr-1 sm:pr-2">
+									{isServicesLoading ? (
+										<div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 px-4 py-5 text-sm text-zinc-500">
+											loading services...
+										</div>
+									) : null}
+
 									{visibleServices.map((service) => (
 										<SelectableOptionCard
 											key={service.id}
@@ -98,15 +188,15 @@ export function ServicePickerScreen() {
 											metaPrimary={formatCurrency(service.price)}
 											metaSecondary={formatDuration(service.durationMinutes)}
 											isSelected={selectedService?.id === service.id}
-											onSelect={() => setSelectedServiceId(service.id)}
+											onSelect={() => handleServiceSelect(service.id)}
 											colorScheme="dark"
 											className="rounded-2xl border-zinc-900 bg-zinc-900/60"
 										/>
 									))}
 
-									{visibleServices.length === 0 ? (
+									{visibleServices.length === 0 && !isServicesLoading ? (
 										<div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 px-4 py-5 text-sm text-zinc-500">
-											no services in this category
+											no services available for this category yet
 										</div>
 									) : null}
 								</div>
@@ -123,6 +213,21 @@ export function ServicePickerScreen() {
 									<div className="space-y-3">
 										<p className="text-sm lowercase tracking-[0.26em] text-zinc-500">add-ons</p>
 										<div className="space-y-1">
+											{isAddOnsLoading ? (
+												<div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 px-4 py-5 text-sm text-zinc-500">
+													loading add-ons...
+												</div>
+											) : null}
+
+											<AddOnOptionRow
+												name={noExtraAddOnLabel}
+												durationMinutes={0}
+												price={0}
+												isSelected={isNoExtraSelected}
+												onSelect={handleNoExtraSelect}
+												isDisabled={!selectedService}
+											/>
+
 											{addOns.map((addOn) => (
 												<AddOnOptionRow
 													key={addOn.id}
@@ -134,6 +239,24 @@ export function ServicePickerScreen() {
 													isDisabled={!selectedService}
 												/>
 											))}
+
+											{addOns.length === 0 && !isAddOnsLoading ? (
+												<div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 px-4 py-5 text-sm text-zinc-500">
+													no add-ons available right now
+												</div>
+											) : null}
+
+											{selectedService && !selectedAddOn && !isNoExtraSelected ? (
+												<p aria-live="polite" className="px-1 pt-1 text-sm text-zinc-500">
+													no add-on selected
+												</p>
+											) : null}
+
+											{selectedService && isNoExtraSelected ? (
+												<p aria-live="polite" className="px-1 pt-1 text-sm text-zinc-500">
+													no extra selected
+												</p>
+											) : null}
 										</div>
 									</div>
 								</div>
