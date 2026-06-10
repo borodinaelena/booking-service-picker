@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Booking Service Picker
 
-## Getting Started
+Take-home project for a booking flow screen built with Next.js, React, TypeScript, Tailwind, and Storybook.
 
-First, run the development server:
+## Run locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Run Storybook
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run storybook
+```
 
-## Learn More
+## What is implemented
 
-To learn more about Next.js, take a look at the following resources:
+- Service picker screen with category filters, service selection, add-on selection, and summary.
+- URL-driven selection state via `searchParams`:
+	- `category`
+	- `serviceId`
+	- `addOnId`
+- TanStack Query cache boundary for data reads:
+	- `services`
+	- `addOns`
+- Polished UX state matrix:
+	- loading
+	- empty
+	- invalid params fallback
+	- no selected service
+	- explicit `no extra`
+	- safe CTA disabled behavior
+- Reusable `SelectableOptionCard` + Storybook story.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Core technical decisions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- State ownership is explicit:
+	- URL state owns user selection.
+	- Query cache owns server-like data (`services`, `addOns`).
+	- Screen derives computed values (`selectedService`, totals) without duplicating source state.
+- `ServicePickerScreen` keeps orchestration local; no global state manager introduced.
+- Shared UI boundary stays small and intentional (`SelectableOptionCard`), while flow-specific UI remains screen-local.
+- Query layer is intentionally thin for mock phase (`Promise.resolve(...)`), without fake network complexity.
 
-## Deploy on Vercel
+## Assumptions
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `category` uses stable key semantics. In current mock data this key equals category string.
+- `addOnId=none` is a screen-local sentinel for explicit `no extra` UX, not a domain entity.
+- Invalid URL params are handled via safe fallbacks in runtime behavior instead of hard URL normalization.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## What I would improve with more time
+
+- Add integration tests for URL/query UX matrix (missing/invalid/empty/no-extra/CTA).
+- Add URL normalization pass for canonical links after invalid params.
+- Add SSR prefetch/dehydrate for query data if backend/API stage is introduced.
+
+## AI disclosure
+
+- I used coding agents (Codex / Claude Code style workflow) as implementation accelerators.
+- Agent-assisted tasks:
+	- repetitive refactor steps
+	- first-pass docs drafting
+	- wiring query/provider boilerplate
+- Manually validated by me:
+	- architecture boundaries
+	- UX behavior and state ownership decisions
+	- final code and docs consistency
+	- lint/build checks

@@ -147,6 +147,40 @@ export function ServicePickerScreen() {
 		updateSearchParams({ addOnId: noExtraAddOnId });
 	}
 
+	function handleContinueToPayment() {
+		if (!selectedService) {
+			return;
+		}
+
+		const nextSearchParams = new URLSearchParams(searchParams.toString());
+
+		if (selectedCategoryKey === allCategoryKey) {
+			nextSearchParams.delete("category");
+		}
+
+		if (selectedCategoryKey !== allCategoryKey) {
+			nextSearchParams.set("category", selectedCategoryKey);
+		}
+
+		nextSearchParams.set("serviceId", selectedService.id);
+
+		if (selectedAddOn) {
+			nextSearchParams.set("addOnId", selectedAddOn.id);
+		}
+
+		if (isNoExtraSelected) {
+			nextSearchParams.set("addOnId", noExtraAddOnId);
+		}
+
+		if (!selectedAddOn && !isNoExtraSelected) {
+			nextSearchParams.delete("addOnId");
+		}
+
+		const nextQueryString = nextSearchParams.toString();
+		const nextUrl = nextQueryString ? `/payment?${nextQueryString}` : "/payment";
+		router.push(nextUrl);
+	}
+
 	return (
 		<main className="relative min-h-screen overflow-hidden bg-zinc-950 text-zinc-50">
 			<div
@@ -273,6 +307,7 @@ export function ServicePickerScreen() {
 									<button
 										type="button"
 										disabled={!selectedService}
+										onClick={handleContinueToPayment}
 										className={joinClasses(
 											"inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-base font-semibold lowercase transition",
 											"focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300",
